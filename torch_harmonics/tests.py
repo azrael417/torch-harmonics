@@ -132,12 +132,12 @@ class TestSphericalHarmonicTransform(unittest.TestCase):
                 self.assertTrue(err.item() <= tol)
 
     @parameterized.expand([
-        [12, 24, 2, "ortho",   "equiangular",    1e-5],
-        [12, 24, 2, "ortho",   "legendre-gauss", 1e-5],
-        [12, 24, 2, "four-pi", "equiangular",    1e-5],
-        [12, 24, 2, "four-pi", "legendre-gauss", 1e-5],
-        [12, 24, 2, "schmidt", "equiangular",    1e-5],
-        [12, 24, 2, "schmidt", "legendre-gauss", 1e-5],
+        [12, 24, 2, "ortho",   "equiangular",    1e-8],
+        [12, 24, 2, "ortho",   "legendre-gauss", 1e-8],
+        [12, 24, 2, "four-pi", "equiangular",    1e-8],
+        [12, 24, 2, "four-pi", "legendre-gauss", 1e-8],
+        [12, 24, 2, "schmidt", "equiangular",    1e-8],
+        [12, 24, 2, "schmidt", "legendre-gauss", 1e-8],
     ])
     def test_sht_grad(self, nlat, nlon, batch_size, norm, grid, tol):
         print(f"Testing gradients of real-valued SHT on {nlat}x{nlon} {grid} grid with {norm} normalization")

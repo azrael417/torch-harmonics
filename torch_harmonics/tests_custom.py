@@ -97,7 +97,7 @@ class TestSphericalHarmonicTransform(unittest.TestCase):
         [256, 512, 32, "four-pi", "equiangular",    1e-9],
         [256, 512, 32, "four-pi", "legendre-gauss", 1e-9],
         [256, 512, 32, "schmidt", "equiangular",    1e-9],
-        [256, 512, 32, "schmidt", "legendre-gauss", 1e-9],
+        [256, 512, 32, "schmidt", "legendre-gauss", 1e-9], 
     ])
     def test_sht(self, nlat, nlon, batch_size, norm, grid, tol):
         print(f"Testing real-valued SHT on {nlat}x{nlon} {grid} grid with {norm} normalization")
@@ -132,22 +132,22 @@ class TestSphericalHarmonicTransform(unittest.TestCase):
                 self.assertTrue(err.item() <= tol)
 
     @parameterized.expand([
-        [12, 24, 2, "ortho",   "equiangular",    1e-5],
-        [12, 24, 2, "ortho",   "legendre-gauss", 1e-5],
-        [12, 24, 2, "four-pi", "equiangular",    1e-5],
-        [12, 24, 2, "four-pi", "legendre-gauss", 1e-5],
-        [12, 24, 2, "schmidt", "equiangular",    1e-5],
-        [12, 24, 2, "schmidt", "legendre-gauss", 1e-5],
+        [12, 24, 2, "ortho",   "equiangular",    1e-8],
+        [12, 24, 2, "ortho",   "legendre-gauss", 1e-8],
+        [12, 24, 2, "four-pi", "equiangular",    1e-8],
+        [12, 24, 2, "four-pi", "legendre-gauss", 1e-8],
+        [12, 24, 2, "schmidt", "equiangular",    1e-8],
+        [12, 24, 2, "schmidt", "legendre-gauss", 1e-8],
     ])
     def test_sht_grad(self, nlat, nlon, batch_size, norm, grid, tol):
         print(f"Testing gradients of real-valued SHT on {nlat}x{nlon} {grid} grid with {norm} normalization")
-
+    
         if grid == "equiangular":
             mmax = nlat // 2
         else:
             mmax = nlat
         lmax = mmax
-
+    
         sht = RealSHTCAG(nlat, nlon, mmax=mmax, lmax=lmax, grid=grid, norm=norm).to(self.device)
         isht = InverseRealSHTCAG(nlat, nlon, mmax=mmax, lmax=lmax, grid=grid, norm=norm).to(self.device)
 
@@ -155,7 +155,7 @@ class TestSphericalHarmonicTransform(unittest.TestCase):
             coeffs = torch.zeros(batch_size, lmax, mmax, device=self.device, dtype=torch.complex128)
             coeffs[:, :lmax, :mmax] = torch.randn(batch_size, lmax, mmax, device=self.device, dtype=torch.complex128)
             signal = isht(coeffs)
-        
+            
         input = torch.randn_like(signal, requires_grad=True)
         err_handle = lambda x : torch.mean(torch.norm( isht(sht(x)) - signal , p='fro', dim=(-1,-2)) / torch.norm(signal, p='fro', dim=(-1,-2)) )
         test_result = gradcheck(err_handle, input, eps=1e-6, atol=tol)

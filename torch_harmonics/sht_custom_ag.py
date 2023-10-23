@@ -37,7 +37,7 @@ import torch.fft
 from .quadrature import *
 from .legendre import *
 
-def _sht_r2c(x: torch.Tensor, pct: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+def _sht_r2c(x: torch.Tensor, pct: torch.Tensor) -> torch.Tensor:
     
     # apply real fft in the longitudinal direction
     x = 2.0 * torch.pi * torch.fft.rfft(x, dim=-1, norm="forward")
@@ -54,7 +54,7 @@ def _sht_r2c(x: torch.Tensor, pct: torch.Tensor, w: torch.Tensor) -> torch.Tenso
     xout = torch.zeros(out_shape, dtype=x.dtype, device=x.device)
 
     # contraction
-    xout[...] = torch.einsum('...kmr,mlk,k->...lmr', x[..., :mmax, :], pct.to(x.dtype), w.to(x.dtype))
+    xout[...] = torch.einsum('...kmr,mlk->...lmr', x[..., :mmax, :], pct.to(x.dtype))
     x = torch.view_as_complex(xout)
     
     return x
@@ -65,7 +65,7 @@ def _isht_c2r(x: torch.Tensor, pct: torch.Tensor, nlon: int) -> torch.Tensor:
     # Evaluate associated Legendre functions on the output nodes
     x = torch.view_as_real(x)
     
-    xs = torch.einsum('...lms, mlk->...kms', x, pct.to(x.dtype) )
+    xs = torch.einsum('...lms, mlk->...kms', x, pct.to(x.dtype) ).contiguous()
     
     # apply the inverse (real) FFT                                                                                                                                                      
     x = torch.view_as_complex(xs)
@@ -81,26 +81,26 @@ class _RealFwdSHT(torch.autograd.Function):
         return input_
 
     @staticmethod
-    def forward(ctx, x: torch.Tensor, pct: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
+    def forward(ctx, x: torch.Tensor, pctw: torch.Tensor) -> torch.Tensor:
         # save some things for BWD
         ctx.nlon = x.shape[-1]
-        ctx.save_for_backward(pct)
+        ctx.save_for_backward(pctw)
 
         # do fwd transform
-        y = _sht_r2c(x, pct, w)
+        y = _sht_r2c(x, pctw)
         
         return y
 
     @staticmethod
     def backward(ctx, go: torch.Tensor) -> torch.Tensor:
-        pct, = ctx.saved_tensors
+        pctw, = ctx.saved_tensors
         nlon = ctx.nlon
 
         # conjugate input
-        go = go.conjg()
+        go = go.conj()
 
         # do bwd transform
-        gi = _isht_c2r(go, pct, nlon)
+        gi = _isht_c2r(go, pctw, nlon)
         
         return gi, None, None
 
@@ -109,28 +109,28 @@ class _RealBwdSHT(torch.autograd.Function):
     """Pass the input to the parallel region."""
     @staticmethod
     def symbolic(graph, input_, comm_id_):
-	return input_
+        return input_
 
     @staticmethod
-    def forward(ctx, x: torch.Tensor, pct: torch.Tensor, w: torch.Tensor, nlon: int) -> torch.Tensor:
+    def forward(ctx, x: torch.Tensor, pct: torch.Tensor, nlon: int) -> torch.Tensor:
 
-	# save some things for BWD
-	ctx.save_for_backward(pct, w)
+        # save some things for BWD
+        ctx.save_for_backward(pct)
 
-	# do bwd transform
+        # do bwd transform
         y = _isht_c2r(x, pct, nlon)
 
         return y
 
     @staticmethod
     def backward(ctx, go: torch.Tensor) -> torch.Tensor:
-        pct, w = ctx.saved_tensors
+        pct, = ctx.saved_tensors
 
         # do bwd transform
-        gi = _sht_c2r(go, pct, w)
+        gi = _sht_r2c(go, pct)
 
         # conjugate
-        gi = gi.conjg()
+        gi = gi.conj()
 
         return gi, None, None, None
     
@@ -163,11 +163,8 @@ class RealSHT(nn.Module):
         self.norm = norm
         self.csphase = csphase
 
-        # only works with ortho norm atm
-        assert(norm == "ortho")
 
         # TODO: include assertions regarding the dimensions
-
         # compute quadrature points
         if self.grid == "legendre-gauss":
             cost, w = legendre_gauss_weights(nlat, -1, 1)
@@ -189,15 +186,14 @@ class RealSHT(nn.Module):
 
         # combine quadrature weights with the legendre weights
         weights = torch.from_numpy(w)
-        pct = precompute_legpoly(self.mmax, self.lmax, tq, norm=self.norm, csphase=self.csphase)
+        pct = precompute_legpoly(self.mmax, self.lmax, tq, norm=self.norm, csphase=self.csphase, inverse=False)
+        pctw =  torch.einsum('mlk,k->mlk', pct, weights).contiguous()
 
         # make sure we do not compute the gradients with respect to the Ylm weights
-        weights.requires_grad_ = False
-        pct.requires_grad_ = False
+        pctw.requires_grad_ = False
 
         # remember quadrature weights
-        self.registers_buffer('pct', pct, persistent=False)
-        self.register_buffer('weights', weights, persistent=False)
+        self.register_buffer('pctw', pctw, persistent=False)
 
     def extra_repr(self):
         r"""
@@ -210,7 +206,7 @@ class RealSHT(nn.Module):
         assert(x.shape[-2] == self.nlat)
         assert(x.shape[-1] == self.nlon)
 
-        return _RealFwdSHT.apply(x, self.pct, self.weights)
+        return _RealFwdSHT.apply(x, self.pctw)
 
 
 class InverseRealSHT(nn.Module):
@@ -234,26 +230,33 @@ class InverseRealSHT(nn.Module):
         self.norm = norm
         self.csphase = csphase
 
-        # only works with ortho norm atm
-        assert(norm == "ortho")
+        # compute quadrature points
+        if self.grid == "legendre-gauss":
+            cost, _ = legendre_gauss_weights(nlat, -1, 1)
+            self.lmax = lmax or self.nlat
+        elif self.grid == "lobatto":
+            cost, _ = lobatto_weights(nlat, -1, 1)
+            self.lmax = lmax or self.nlat-1
+        elif self.grid == "equiangular":
+            cost, _ = clenshaw_curtiss_weights(nlat, -1, 1)
+            self.lmax = lmax or self.nlat
+        else:
+            raise(ValueError("Unknown quadrature mode"))
 
         # apply cosine transform and flip them
-	tq = np.flip(np.arccos(cost))
+        tq = np.flip(np.arccos(cost))
 
 	# determine the dimensions
         self.mmax = mmax or self.nlon // 2 + 1
 
         # combine quadrature weights with the legendre weights
-        weights = torch.from_numpy(w)
-        pct = precompute_legpoly(self.mmax, self.lmax, tq, norm=self.norm, csphase=self.csphase)
-
+        pct = precompute_legpoly(self.mmax, self.lmax, tq, norm=self.norm, csphase=self.csphase, inverse=True)
+                                 
         # make sure we do not compute the gradients with respect to the Ylm weights
-        weights.requires_grad_ = False
         pct.requires_grad_ = False
 
         # remember quadrature weights
-        self.registers_buffer('pct', pct, persistent=False)
-        self.register_buffer('weights', weights, persistent=False)
+        self.register_buffer('pct', pct, persistent=False)
 
     def extra_repr(self):
         r"""
@@ -266,7 +269,7 @@ class InverseRealSHT(nn.Module):
         assert(x.shape[-2] == self.lmax)
         assert(x.shape[-1] == self.mmax)
 
-        return _RealBwdSHT.apply(x, self.pct, self.weights, self.nlon)
+        return _RealBwdSHT.apply(x, self.pct, self.nlon)
 
 
 class RealVectorSHT(nn.Module):
