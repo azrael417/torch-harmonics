@@ -31,7 +31,10 @@
 
 __version__ = '0.6.3'
 
+
 from .sht import RealSHT, InverseRealSHT, RealVectorSHT, InverseRealVectorSHT
+from .sht_custom_ag import RealSHT as RealSHTCAG
+from .sht_custom_ag import InverseRealSHT as InverseRealSHTCAG
 from . import quadrature
 from . import random_fields
 from . import examples
