@@ -479,9 +479,9 @@ class _NeighborhoodAttentionS2Cuda(torch.autograd.Function):
         qw = qw.reshape(B*nh, -1, H, W)
 
         # convert to float32
-        kw = kw.to(torch.float32)
-        vw = vw.to(torch.float32)
-        qw = qw.to(torch.float32)
+        kw = kw.to(torch.float32).contiguous()
+        vw = vw.to(torch.float32).contiguous()
+        qw = qw.to(torch.float32).contiguous()
 
         output = attention_cuda_extension.forward(kw, vw, qw, quad_weights,
                                                   col_idx, row_off,
@@ -508,13 +508,13 @@ class _NeighborhoodAttentionS2Cuda(torch.autograd.Function):
 
         # reshape, folding num heads into batch dim
         B, _, H, W = kw.shape
-        kw = kw.reshape(B*nh, -1, H, W)
+        kw = kw.reshape(B*nh, -1, H, W).contiguous()
         B, _, H, W = vw.shape
-        vw = vw.reshape(B*nh, -1, H, W)
+        vw = vw.reshape(B*nh, -1, H, W).contiguous()
         B, _, H, W = qw.shape
-        qw = qw.reshape(B*nh, -1, H, W)
+        qw = qw.reshape(B*nh, -1, H, W).contiguous()
         B, _, H, W  = grad_output.shape
-        grad_output = grad_output.reshape(B*nh, -1, H, W)
+        grad_output = grad_output.reshape(B*nh, -1, H, W).contiguous()
 
         dkw,dvw,dqw = attention_cuda_extension.backward_dkvq(kw, vw, qw, grad_output,
                                                              quad_weights,
