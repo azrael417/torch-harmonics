@@ -95,14 +95,15 @@ void preprocess_psi_kernel(int64_t nnz, int64_t K, int64_t Ho, int64_t *ker_h, i
     return;
 }
 
+
 torch::Tensor preprocess_psi(const int64_t K, const int64_t Ho, torch::Tensor ker_idx, torch::Tensor row_idx,
                              torch::Tensor col_idx, torch::Tensor val)
 {
 
-    CHECK_INPUT_TENSOR(ker_idx);
-    CHECK_INPUT_TENSOR(row_idx);
-    CHECK_INPUT_TENSOR(col_idx);
-    CHECK_INPUT_TENSOR(val);
+    CHECK_CPU_INPUT_TENSOR(ker_idx);
+    CHECK_CPU_INPUT_TENSOR(row_idx);
+    CHECK_CPU_INPUT_TENSOR(col_idx);
+    CHECK_CPU_INPUT_TENSOR(val);
 
     int64_t nnz = val.size(0);
     int64_t *ker_h = ker_idx.data_ptr<int64_t>();
@@ -110,7 +111,6 @@ torch::Tensor preprocess_psi(const int64_t K, const int64_t Ho, torch::Tensor ke
     int64_t *col_h = col_idx.data_ptr<int64_t>();
     int64_t *roff_h = new int64_t[Ho * K + 1];
     int64_t nrows;
-    // float *val_h = val.data_ptr<float>();
 
     AT_DISPATCH_FLOATING_TYPES(val.scalar_type(), "preprocess_psi", ([&] {
                                    preprocess_psi_kernel<scalar_t>(nnz, K, Ho, ker_h, row_h, col_h, roff_h,
@@ -128,7 +128,8 @@ torch::Tensor preprocess_psi(const int64_t K, const int64_t Ho, torch::Tensor ke
     return roff_idx;
 }
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+PYBIND11_MODULE(disco_helpers, m)
 {
-    m.def("preprocess_psi", &preprocess_psi, "Sort psi matrix, required for using disco_cuda.");
+    m.def("preprocess_psi", &preprocess_psi, "Sort psi matrix, required for using CUDA kernels.");
 }
+
