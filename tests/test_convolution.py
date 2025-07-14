@@ -35,11 +35,19 @@ from functools import partial
 import math
 import numpy as np
 import torch
+from torch.export import export
 from torch.autograd import gradcheck
 from torch_harmonics import quadrature, DiscreteContinuousConvS2, DiscreteContinuousConvTransposeS2
 
 from torch_harmonics.quadrature import _precompute_grid, _precompute_latitudes, _precompute_longitudes
 
+try:
+    import disco_cuda_extension
+    _cuda_extension_available = True
+except ImportError as err:
+    print(f"Warning: Couldn't Import cuda attention: {err}")
+    disco_cuda_extension = None
+    _cuda_extension_available = False
 
 _devices = [(torch.device("cpu"),)]
 if torch.cuda.is_available():
@@ -315,6 +323,71 @@ class TestDiscreteContinuousConvolution(unittest.TestCase):
         self.assertTrue(torch.allclose(x_grad, x_ref_grad, rtol=tol, atol=tol))
         self.assertTrue(torch.allclose(conv.weight.grad, w_ref.grad, rtol=tol, atol=tol))
 
+    @parameterized.expand(
+        [
+            # regular convolution
+            [8, 4, 2, (16, 32), (16, 32), (3), "piecewise linear", "mean", "equiangular", "equiangular", False, False],
+            # transpose convolution
+            [8, 4, 2, (16, 32), (16, 32), (3), "piecewise linear", "mean", "equiangular", "equiangular", True, False],
+        ]
+    )
+    @unittest.skipUnless((torch.cuda.is_available() and _cuda_extension_available), "skipping export test because CUDA is not available")
+    def test_disco_convolution_export(
+        self,
+        batch_size,
+        in_channels,
+        out_channels,
+        in_shape,
+        out_shape,
+        kernel_shape,
+        basis_type,
+        basis_norm_mode,
+        grid_in,
+        grid_out,
+        transpose,
+        verbose,
+    ):
+
+        if verbose:
+            print(f"Testing DISCO convolution on {in_shape[0]}x{in_shape[1]} {grid_in} grid to {out_shape[0]}x{out_shape[1]} {grid_out} grid on {self.device.type} device")
+        
+        nlat_in, nlon_in = in_shape
+        nlat_out, nlon_out = out_shape
+
+        if isinstance(kernel_shape, int):
+            theta_cutoff = (kernel_shape + 1) * torch.pi / float(nlat_in - 1)
+        else:
+            theta_cutoff = (kernel_shape[0] + 1) * torch.pi / float(nlat_in - 1)
+
+        Conv = DiscreteContinuousConvTransposeS2 if transpose else DiscreteContinuousConvS2
+
+        args = (
+            in_channels,
+            out_channels,
+            in_shape,
+            out_shape,
+            kernel_shape,
+        )
+
+        kwargs = dict(
+            basis_type=basis_type,
+            basis_norm_mode=basis_norm_mode,
+            groups=1,
+            grid_in=grid_in,
+            grid_out=grid_out,
+            bias=False,
+            theta_cutoff=theta_cutoff,
+        )
+
+        # instantiate module
+        conv = Conv(*args, **kwargs).to(self.device)
+
+        # create dummy input
+        inp = torch.randn(batch_size, in_channels, *in_shape, dtype=torch.float32, device=self.device)
+
+        exported_program: torch.export.ExportedProgram = export(
+            conv, args=(inp,), strict=False, 
+        )
 
 if __name__ == "__main__":
     unittest.main()
