@@ -42,8 +42,8 @@ from functools import partial
 
 from torch_harmonics.cache import lru_cache
 from torch_harmonics.quadrature import _precompute_grid, _precompute_latitudes, _precompute_longitudes
-from ._convolution import _get_psi, _disco_s2_contraction_torch, _disco_s2_transpose_contraction_torch
-from ._convolution import _disco_s2_contraction_optimized, _disco_s2_transpose_contraction_optimized
+from ._disco_utils import _get_psi, _disco_s2_contraction_torch, _disco_s2_transpose_contraction_torch
+from ._disco_utils import _disco_s2_contraction_optimized, _disco_s2_transpose_contraction_optimized
 from torch_harmonics.filter_basis import FilterBasis, get_filter_basis
 
 # import custom C++/CUDA extensions if available
@@ -278,10 +278,12 @@ class DiscreteContinuousConv(nn.Module, metaclass=abc.ABCMeta):
         basis_type: Optional[str] = "piecewise linear",
         groups: Optional[int] = 1,
         bias: Optional[bool] = True,
+        optimized_kernel: Optional[bool] = True,
     ):
         super().__init__()
 
         self.kernel_shape = kernel_shape
+        self.optimized_kernel = optimized_kernel and _optimized_extension_available
 
         # get the filter basis functions
         self.filter_basis = get_filter_basis(kernel_shape=kernel_shape, basis_type=basis_type)
@@ -335,11 +337,10 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
         theta_cutoff: Optional[float] = None,
         optimized_kernel: Optional[bool] = True,
     ):
-        super().__init__(in_channels, out_channels, kernel_shape, basis_type, groups, bias)
+        super().__init__(in_channels, out_channels, kernel_shape, basis_type, groups, bias, optimized_kernel)
 
         self.nlat_in, self.nlon_in = in_shape
         self.nlat_out, self.nlon_out = out_shape
-        self.optimized_kernel = optimized_kernel
 
         # make sure the p-shift works by checking that longitudes are divisible
         assert self.nlon_in % self.nlon_out == 0
@@ -369,7 +370,7 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
         col_idx = idx[2, ...].contiguous()
         vals = vals.contiguous()
 
-        if _optimized_extension_available and self.optimized_kernel:
+        if self.optimized_kernel:
             # preprocessed data-structure for GPU kernel
             roff_idx = preprocess_psi(self.kernel_size, self.nlat_out, ker_idx, row_idx, col_idx, vals).contiguous()
             self.register_buffer("psi_roff_idx", roff_idx, persistent=False)
@@ -396,7 +397,7 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
-        if _optimized_extension_available and self.optimized_kernel:
+        if self.optimized_kernel:
             x = _disco_s2_contraction_optimized(
                 x, self.psi_roff_idx, self.psi_ker_idx, self.psi_row_idx, self.psi_col_idx, self.psi_vals, self.kernel_size, self.nlat_out, self.nlon_out
             )
@@ -440,11 +441,10 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         theta_cutoff: Optional[float] = None,
         optimized_kernel: Optional[bool] = True,
     ):
-        super().__init__(in_channels, out_channels, kernel_shape, basis_type, groups, bias)
+        super().__init__(in_channels, out_channels, kernel_shape, basis_type, groups, bias, optimized_kernel)
 
         self.nlat_in, self.nlon_in = in_shape
         self.nlat_out, self.nlon_out = out_shape
-        self.optimized_kernel = optimized_kernel
 
         # make sure the p-shift works by checking that longitudes are divisible
         assert self.nlon_out % self.nlon_in == 0
@@ -475,7 +475,7 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         col_idx = idx[2, ...].contiguous()
         vals = vals.contiguous()
 
-        if _optimized_extension_available and self.optimized_kernel:
+        if self.optimized_kernel:
             # preprocessed data-structure for GPU kernel
             roff_idx = preprocess_psi(self.kernel_size, self.nlat_in, ker_idx, row_idx, col_idx, vals).contiguous()
             self.register_buffer("psi_roff_idx", roff_idx, persistent=False)
@@ -487,7 +487,8 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         self.register_buffer("psi_vals", vals, persistent=False)
 
         # also store psi just in case
-        self.psi_st = _get_psi(self.kernel_size, self.psi_idx, self.psi_vals, self.nlat_in, self.nlon_in, self.nlat_out, self.nlon_out, semi_transposed=True)
+        if not self.optimized_kernel:
+            self.psi_st = _get_psi(self.kernel_size, self.psi_idx, self.psi_vals, self.nlat_in, self.nlon_in, self.nlat_out, self.nlon_out, semi_transposed=True)
 
     def extra_repr(self):
         r"""
@@ -508,7 +509,7 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         x = torch.einsum("bgcxy,gock->bgokxy", x, self.weight.reshape(self.groups, -1, self.weight.shape[1], self.weight.shape[2])).contiguous()
         x = x.reshape(B, -1, x.shape[-3], H, W)
 
-        if _optimized_extension_available and self.optimized_kernel:
+        if self.optimized_kernel:
             out = _disco_s2_transpose_contraction_optimized(
                 x, self.psi_roff_idx, self.psi_ker_idx, self.psi_row_idx, self.psi_col_idx, self.psi_vals, self.kernel_size, self.nlat_out, self.nlon_out
             )
