@@ -29,5 +29,5 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-from . import _C
+#from . import _C
 from .attention import AttentionS2, NeighborhoodAttentionS2

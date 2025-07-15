@@ -66,7 +66,7 @@ def _get_psi(kernel_size: int, psi_idx: torch.Tensor, psi_vals: torch.Tensor, nl
 #def disco_cuda_extension_forward(x, roff_idx, ker_idx, row_idx, col_idx, vals, kernel_size, nlat_out, nlon_out):
 #    return disco_cuda_extension.forward(x, roff_idx, ker_idx, row_idx, col_idx, vals, kernel_size, nlat_out, nlon_out)
 
-class _DiscoS2ContractionCuda(torch.autograd.Function):
+class _DiscoS2ContractionOptimized(torch.autograd.Function):
     @staticmethod
     @custom_fwd(device_type="cuda")
     def forward(ctx, x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
@@ -99,7 +99,7 @@ class _DiscoS2ContractionCuda(torch.autograd.Function):
         return grad_input, None, None, None, None, None, None, None, None
 
 
-class _DiscoS2TransposeContractionCuda(torch.autograd.Function):
+class _DiscoS2TransposeContractionOptimized(torch.autograd.Function):
     @staticmethod
     @custom_fwd(device_type="cuda")
     def forward(ctx, x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
@@ -129,16 +129,16 @@ class _DiscoS2TransposeContractionCuda(torch.autograd.Function):
         return grad_input, None, None, None, None, None, None, None, None
 
 # CUDA
-def _disco_s2_contraction_cuda(x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
+def _disco_s2_contraction_optimized(x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
                                row_idx: torch.Tensor, col_idx: torch.Tensor, vals: torch.Tensor,
                                kernel_size: int, nlat_out: int, nlon_out: int) -> torch.Tensor:
-    return _DiscoS2ContractionCuda.apply(x, roff_idx, ker_idx, row_idx, col_idx, vals,
+    return _DiscoS2ContractionOptimized.apply(x, roff_idx, ker_idx, row_idx, col_idx, vals,
                                          kernel_size, nlat_out, nlon_out)
 
-def _disco_s2_transpose_contraction_cuda(x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
+def _disco_s2_transpose_contraction_optimized(x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
                                          row_idx: torch.Tensor, col_idx: torch.Tensor, vals: torch.Tensor,
                                          kernel_size: int, nlat_out: int, nlon_out: int) -> torch.Tensor:
-    return _DiscoS2TransposeContractionCuda.apply(x, roff_idx, ker_idx, row_idx, col_idx, vals,
+    return _DiscoS2TransposeContractionOptimized.apply(x, roff_idx, ker_idx, row_idx, col_idx, vals,
                                                   kernel_size, nlat_out, nlon_out)
 
 

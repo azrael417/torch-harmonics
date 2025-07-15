@@ -91,29 +91,38 @@ def get_ext_modules():
                 ]
             )
         )
-        ext_modules.append(
-            CppExtension(
-                "torch_harmonics.disco._C", 
-                [   
-                    "torch_harmonics/disco/csrc/disco_interface.cpp",
-                    "torch_harmonics/disco/csrc/disco_cpu.cpp"
-                ]
+        
+        # Create a single extension that includes both CPU and CUDA code
+        sources = [
+            "torch_harmonics/disco/csrc/disco_interface.cpp",
+            "torch_harmonics/disco/csrc/disco_cpu.cpp"
+        ]
+        
+        if BUILD_CUDA:
+            print(f"Compiling custom CUDA kernels for torch-harmonics.")
+            sources.extend([
+                "torch_harmonics/disco/csrc/disco_cuda_fwd.cu",
+                "torch_harmonics/disco/csrc/disco_cuda_bwd.cu",
+            ])
+            ext_modules.append(
+                CUDAExtension(
+                    "torch_harmonics.disco._C",
+                    sources,
+                    extra_compile_args=get_compile_args("disco")
+                )
             )
-        )
+        else:
+            ext_modules.append(
+                CppExtension(
+                    "torch_harmonics.disco._C", 
+                    sources,
+                    extra_compile_args=get_compile_args("disco")
+                )
+            )
         cmdclass["build_ext"] = BuildExtension
 
     if BUILD_CUDA:
-        print(f"Compiling custom CUDA kernels for torch-harmonics.")
-        ext_modules.append(
-            CUDAExtension(
-                "torch_harmonics.disco._C",
-                [
-                    "torch_harmonics/disco/csrc/disco_cuda_fwd.cu",
-                    "torch_harmonics/disco/csrc/disco_cuda_bwd.cu",
-                ],
-                extra_compile_args=get_compile_args("disco")
-            )
-        )
+        print(f"Compiling attention CUDA kernels for torch-harmonics.")
         ext_modules.append(
             CUDAExtension(
                 name="attention_cuda_extension",

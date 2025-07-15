@@ -29,5 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+import torch
 from . import _C
 from .convolution import DiscreteContinuousConvS2, DiscreteContinuousConvTransposeS2

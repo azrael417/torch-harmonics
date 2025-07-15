@@ -43,17 +43,18 @@ from functools import partial
 from torch_harmonics.cache import lru_cache
 from torch_harmonics.quadrature import _precompute_grid, _precompute_latitudes, _precompute_longitudes
 from ._convolution import _get_psi, _disco_s2_contraction_torch, _disco_s2_transpose_contraction_torch
-from ._convolution import _disco_s2_contraction_cuda, _disco_s2_transpose_contraction_cuda
+from ._convolution import _disco_s2_contraction_optimized, _disco_s2_transpose_contraction_optimized
 from torch_harmonics.filter_basis import FilterBasis, get_filter_basis
 
 # import custom C++/CUDA extensions if available
 from disco_helpers import preprocess_psi
 try:
     from torch.ops import disco_kernels
-    _cuda_extension_available = True
+    _optimized_extension_available = True
 except ImportError as err:
     disco_kernels = None
-    _cuda_extension_available = False
+    _optimized_extension_available = False
+    warn("Could not find optimized DISCO extension, falling back to PyTorch implementation")
 
 
 def _normalize_convolution_tensor_s2(
@@ -332,11 +333,13 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
         grid_out: Optional[str] = "equiangular",
         bias: Optional[bool] = True,
         theta_cutoff: Optional[float] = None,
+        optimized_kernel: Optional[bool] = True,
     ):
         super().__init__(in_channels, out_channels, kernel_shape, basis_type, groups, bias)
 
         self.nlat_in, self.nlon_in = in_shape
         self.nlat_out, self.nlon_out = out_shape
+        self.optimized_kernel = optimized_kernel
 
         # make sure the p-shift works by checking that longitudes are divisible
         assert self.nlon_in % self.nlon_out == 0
@@ -366,7 +369,7 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
         col_idx = idx[2, ...].contiguous()
         vals = vals.contiguous()
 
-        if _cuda_extension_available:
+        if _optimized_extension_available and self.optimized_kernel:
             # preprocessed data-structure for GPU kernel
             roff_idx = preprocess_psi(self.kernel_size, self.nlat_out, ker_idx, row_idx, col_idx, vals).contiguous()
             self.register_buffer("psi_roff_idx", roff_idx, persistent=False)
@@ -378,7 +381,8 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
         self.register_buffer("psi_vals", vals, persistent=False)
 
         # also store psi as COO matrix just in case for torch input
-        self.psi = _get_psi(self.kernel_size, self.psi_idx, self.psi_vals, self.nlat_in, self.nlon_in, self.nlat_out, self.nlon_out)
+        if not self.optimized_kernel:
+            self.psi = _get_psi(self.kernel_size, self.psi_idx, self.psi_vals, self.nlat_in, self.nlon_in, self.nlat_out, self.nlon_out)
 
     def extra_repr(self):
         r"""
@@ -392,13 +396,11 @@ class DiscreteContinuousConvS2(DiscreteContinuousConv):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
-        if x.is_cuda and _cuda_extension_available:
-            x = _disco_s2_contraction_cuda(
+        if _optimized_extension_available and self.optimized_kernel:
+            x = _disco_s2_contraction_optimized(
                 x, self.psi_roff_idx, self.psi_ker_idx, self.psi_row_idx, self.psi_col_idx, self.psi_vals, self.kernel_size, self.nlat_out, self.nlon_out
             )
         else:
-            if x.is_cuda:
-                warn("couldn't find CUDA extension, falling back to slow PyTorch implementation")
             x = _disco_s2_contraction_torch(x, self.psi.to(x.device), self.nlon_out)
 
         # extract shape
@@ -436,6 +438,7 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         grid_out: Optional[str] = "equiangular",
         bias: Optional[bool] = True,
         theta_cutoff: Optional[float] = None,
+        optimized_kernel: Optional[bool] = True,
     ):
         super().__init__(in_channels, out_channels, kernel_shape, basis_type, groups, bias)
 
@@ -471,7 +474,7 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         col_idx = idx[2, ...].contiguous()
         vals = vals.contiguous()
 
-        if _cuda_extension_available:
+        if _optimized_extension_available and self.optimized_kernel:
             # preprocessed data-structure for GPU kernel
             roff_idx = preprocess_psi(self.kernel_size, self.nlat_in, ker_idx, row_idx, col_idx, vals).contiguous()
             self.register_buffer("psi_roff_idx", roff_idx, persistent=False)
@@ -504,13 +507,11 @@ class DiscreteContinuousConvTransposeS2(DiscreteContinuousConv):
         x = torch.einsum("bgcxy,gock->bgokxy", x, self.weight.reshape(self.groups, -1, self.weight.shape[1], self.weight.shape[2])).contiguous()
         x = x.reshape(B, -1, x.shape[-3], H, W)
 
-        if x.is_cuda and _cuda_extension_available:
-            out = _disco_s2_transpose_contraction_cuda(
+        if _optimized_extension_available and self.optimized_kernel:
+            out = _disco_s2_transpose_contraction_optimized(
                 x, self.psi_roff_idx, self.psi_ker_idx, self.psi_row_idx, self.psi_col_idx, self.psi_vals, self.kernel_size, self.nlat_out, self.nlon_out
             )
         else:
-            if x.is_cuda:
-                warn("couldn't find CUDA extension, falling back to slow PyTorch implementation")
             out = _disco_s2_transpose_contraction_torch(x, self.psi_st.to(x.device), self.nlon_out)
 
         if self.bias is not None:
