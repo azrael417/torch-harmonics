@@ -58,13 +58,13 @@ namespace disco_kernels {
         for (int64_t b = 0; b < B; b++) {
             for (int64_t c = 0; c < C; c++) {
 
-                for (int64_t r = 0; r < nnz; r++) {
+                for (int64_t z = 0; z < nnz; z++) {
 
                     // COO format, we can optimize later
-                    int64_t ho = row_idx[r];
-                    int64_t ker = ker_idx[r];
-                    int64_t col = col_idx[r];
-                    scalar_t val = vals[r];
+                    int64_t ho = row_idx[z];
+                    int64_t ker = ker_idx[z];
+                    int64_t col = col_idx[z];
+                    scalar_t val = vals[z];
 
                     int64_t wi = static_cast<int64_t>(col % Wi);
                     int64_t hi = static_cast<int64_t>(col / Wi);
@@ -95,26 +95,21 @@ namespace disco_kernels {
         for (int64_t b = 0; b < B; b++) {
             for (int64_t c = 0; c < C; c++) {
 
-                for (int64_t r = 0; r < nnz; r++) {
+                for (int64_t z = 0; z < nnz; z++) {
 
-                    // r = ho + Ho * ker
-                    int64_t hi = row_idx[r];
-                    int64_t ker = ker_idx[r];
+                    // COO format, we can optimize later
+                    int64_t hi = row_idx[z];
+                    int64_t ker = ker_idx[z];
+                    int64_t col = col_idx[z];
+                    scalar_t val = vals[z];
+
+                    int64_t wo = static_cast<int64_t>(col % Wo);
+                    int64_t ho = static_cast<int64_t>(col / Wo);
 
                     for (int64_t wi = 0; wi < Wi; wi++) {
-
-                        for (int64_t idc = roff_idx[r]; idc < roff_idx[r+1]; idc++) {
-                            int64_t col = col_idx[idc];
-                            scalar_t val = vals[idc];
-
-                            // col = wi + Wi * hi -> wi = col % Wi, hi = col // Wi
-                            int64_t wo = static_cast<int64_t>(col % Wo);
-                            int64_t ho = static_cast<int64_t>(col / Wo);
-
-                            // compute shifted w
-                            int64_t wopp = static_cast<int64_t>((wo + pscale * wi) % Wo);
-                            out[b][c][ho][wopp] += val * inp[b][c][ker][hi][wi];
-                        } 
+                        // compute shifted w
+                        int64_t wopp = static_cast<int64_t>((wo + pscale * wi) % Wo);
+                        out[b][c][ho][wopp] += val * inp[b][c][ker][hi][wi];
                     }
                 }
             }
