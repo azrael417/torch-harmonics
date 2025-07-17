@@ -57,6 +57,11 @@ def get_compile_args(module_name):
     """If user runs build with TORCH_HARMONICS_DEBUG=1 set, it will use debugging flags to build"""
     debug_mode = os.environ.get('TORCH_HARMONICS_DEBUG', '0') == '1'
     profile_mode = os.environ.get('TORCH_HARMONICS_PROFILE', '0') == '1'
+    openmp_mode = os.getenv('TORCH_HARMONICS_ENABLE_OPENMP', '0') == '1'
+
+    cpp_extra_flags = []
+    if openmp_mode:
+        cpp_extra_flags.append("-fopenmp")
 
     nvcc_extra_flags = []
     if profile_mode:
@@ -72,7 +77,7 @@ def get_compile_args(module_name):
     else:
         print(f"NOTE: Compiling {module_name} with release flags")
         return {
-            'cxx': ['-O3', "-DNDEBUG"],
+            'cxx': ['-O3', "-DNDEBUG"] + cpp_extra_flags,
             'nvcc': ['-O3', "-DNDEBUG"] + nvcc_extra_flags
         }
 
