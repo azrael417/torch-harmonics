@@ -33,7 +33,6 @@ from typing import Optional
 import math
 
 import torch
-from torch.amp import custom_fwd, custom_bwd
 from disco_helpers import optimized_kernels_is_available
 from . import disco_kernels
 
@@ -124,82 +123,6 @@ def _disco_s2_transpose_contraction_optimized(
     out = disco_kernels.backward.default(inp, roff_idx, ker_idx, row_idx, col_idx, vals, kernel_size, nlat_out, nlon_out)
     out = out.to(itype)
     return out
-
-
-# class _DiscoS2ContractionOptimized(torch.autograd.Function):
-#     @staticmethod
-#     @custom_fwd()
-#     def forward(ctx, x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
-#                 row_idx: torch.Tensor, col_idx: torch.Tensor, vals: torch.Tensor,
-#                 kernel_size: int, nlat_out: int, nlon_out: int):
-#         ctx.save_for_backward(roff_idx, ker_idx, row_idx, col_idx, vals)
-#         ctx.kernel_size = kernel_size
-#         ctx.nlat_in = x.shape[-2]
-#         ctx.nlon_in = x.shape[-1]
-#         xtype = x.dtype
-#         x = x.to(torch.float32).contiguous()
-#         #output = disco_cuda_extension.forward(x, roff_idx, ker_idx, row_idx, col_idx, vals, kernel_size, nlat_out, nlon_out)
-#         output = disco_kernels.forward(x, roff_idx, ker_idx, row_idx, col_idx, vals, kernel_size, nlat_out, nlon_out)
-#         output = output.to(xtype)
-
-#         return output
-
-#     @staticmethod
-#     @custom_bwd()
-#     def backward(ctx, grad_output):
-#         roff_idx, ker_idx, row_idx, col_idx, vals = ctx.saved_tensors
-#         gtype =	grad_output.dtype
-#         grad_output = grad_output.to(torch.float32).contiguous()
-#         #grad_input = disco_cuda_extension.backward(grad_output, roff_idx, ker_idx, row_idx, col_idx, vals,
-#         #                                 ctx.kernel_size, ctx.nlat_in, ctx.nlon_in)
-#         grad_input = disco_kernels.backward(grad_output, roff_idx, ker_idx, row_idx, col_idx, vals,
-#                                             ctx.kernel_size, ctx.nlat_in, ctx.nlon_in)
-#         grad_input = grad_input.to(gtype)
-
-#         return grad_input, None, None, None, None, None, None, None, None
-
-
-# class _DiscoS2TransposeContractionOptimized(torch.autograd.Function):
-#     @staticmethod
-#     @custom_fwd()
-#     def forward(ctx, x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
-#                 row_idx: torch.Tensor, col_idx: torch.Tensor, vals: torch.Tensor,
-#                 kernel_size: int, nlat_out: int, nlon_out: int):
-#         ctx.save_for_backward(roff_idx, ker_idx, row_idx, col_idx, vals)
-#         ctx.kernel_size = kernel_size
-#         ctx.nlat_in = x.shape[-2]
-#         ctx.nlon_in = x.shape[-1]
-#         xtype =	x.dtype
-#         x = x.to(torch.float32).contiguous()
-#         output = disco_kernels.backward(x, roff_idx, ker_idx, row_idx, col_idx, vals, kernel_size, nlat_out, nlon_out)
-#         output = output.to(xtype)
-
-#         return output
-
-#     @staticmethod
-#     @custom_bwd()
-#     def backward(ctx, grad_output):
-#         roff_idx, ker_idx, row_idx, col_idx, vals = ctx.saved_tensors
-#         gtype = grad_output.dtype
-#         grad_output = grad_output.to(torch.float32).contiguous()
-#         grad_input = disco_kernels.forward(grad_output, roff_idx, ker_idx, row_idx, col_idx, vals,
-#                                         ctx.kernel_size, ctx.nlat_in, ctx.nlon_in)
-#         grad_input = grad_input.to(gtype)
-
-#         return grad_input, None, None, None, None, None, None, None, None
-
-# CUDA
-# def _disco_s2_contraction_optimized(x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
-#                                row_idx: torch.Tensor, col_idx: torch.Tensor, vals: torch.Tensor,
-#                                kernel_size: int, nlat_out: int, nlon_out: int) -> torch.Tensor:
-#     return _DiscoS2ContractionOptimized.apply(x, roff_idx, ker_idx, row_idx, col_idx, vals,
-#                                          kernel_size, nlat_out, nlon_out)
-
-# def _disco_s2_transpose_contraction_optimized(x: torch.Tensor, roff_idx: torch.Tensor, ker_idx: torch.Tensor,
-#                                          row_idx: torch.Tensor, col_idx: torch.Tensor, vals: torch.Tensor,
-#                                          kernel_size: int, nlat_out: int, nlon_out: int) -> torch.Tensor:
-#     return _DiscoS2TransposeContractionOptimized.apply(x, roff_idx, ker_idx, row_idx, col_idx, vals,
-#                                                   kernel_size, nlat_out, nlon_out)
 
 # torch kernel related functions
 def _get_psi(kernel_size: int, psi_idx: torch.Tensor, psi_vals: torch.Tensor, nlat_in: int, nlon_in: int, nlat_out: int, nlon_out: int, nlat_in_local: Optional[int] = None, nlat_out_local: Optional[int] = None, semi_transposed: Optional[bool] = False):
