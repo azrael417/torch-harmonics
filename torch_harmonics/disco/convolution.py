@@ -47,16 +47,6 @@ from ._disco_utils import _disco_s2_contraction_optimized, _disco_s2_transpose_c
 from torch_harmonics.filter_basis import FilterBasis, get_filter_basis
 from disco_helpers import optimized_kernels_is_available, preprocess_psi
 
-# import custom C++/CUDA extensions if available
-#try:
-#    from torch.ops import disco_kernels
-#    _optimized_extension_available = True
-#except ImportError as err:
-#    disco_kernels = None
-#    _optimized_extension_available = False
-#    warn("Could not find optimized DISCO extension, falling back to PyTorch implementation")
-
-
 def _normalize_convolution_tensor_s2(
     psi_idx, psi_vals, in_shape, out_shape, kernel_size, quad_weights, transpose_normalization=False, basis_norm_mode="mean", merge_quadrature=False, eps=1e-9
 ):
