@@ -34,14 +34,6 @@
 
 namespace disco_kernels {
 
-    // forward kernel meta
-    //torch::Tensor disco_meta_fwd(torch::Tensor inp, torch::Tensor roff_idx, torch::Tensor ker_idx, torch::Tensor row_idx,
-    //    torch::Tensor col_idx, torch::Tensor val, int64_t K, int64_t Ho, int64_t Wo);
-
-    // backward kernel meta
-    //torch::Tensor disco_meta_bwd(torch::Tensor inp, torch::Tensor roff_idx, torch::Tensor ker_idx, torch::Tensor row_idx,
-    //    torch::Tensor col_idx, torch::Tensor val, int64_t K, int64_t Ho, int64_t Wo);
-
     template <typename scalar_t>
     static void disco_fwd_cpu(int64_t B, int64_t C, int64_t K, int64_t Hi, int64_t Wi, 
         int64_t Ho, int64_t Wo, int64_t nnz, int64_t nnr,
@@ -53,7 +45,7 @@ namespace disco_kernels {
         const torch::PackedTensorAccessor32<scalar_t, 1> vals,
         torch::PackedTensorAccessor32<scalar_t, 5> out) {
 
-        int64_t pscale = static_cast<int64_t>(Wi / Wo);
+        const int64_t pscale = static_cast<int64_t>(Wi / Wo);
 
         // loop over matrix entries
         #pragma omp parallel for collapse(3)
@@ -98,7 +90,7 @@ namespace disco_kernels {
         const torch::PackedTensorAccessor32<scalar_t, 1> vals,
         torch::PackedTensorAccessor32<scalar_t, 4> out) {
 
-        int64_t pscale = static_cast<int64_t>(Wo / Wi);
+        const int64_t pscale = static_cast<int64_t>(Wo / Wi);
 
         // loop over matrix entries
         #pragma omp parallel for collapse(2)

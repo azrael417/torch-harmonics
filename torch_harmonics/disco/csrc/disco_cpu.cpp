@@ -99,24 +99,4 @@ namespace disco_kernels {
         m.impl("backward",  &disco_cpu_bwd);
     }
 
-    // // These are fake operators, needed in order to compile graphs with disco kernels in them
-    // torch::Tensor disco_meta_fwd(torch::Tensor inp, torch::Tensor roff_idx, torch::Tensor ker_idx, torch::Tensor row_idx,
-    //     torch::Tensor col_idx, torch::Tensor val, int64_t K, int64_t Ho, int64_t Wo) {
-    //     auto out = torch::empty({inp.size(0), inp.size(1), K, Ho, Wo}, inp.options());
-    //     return out;
-    // }
-
-    // torch::Tensor disco_meta_bwd(torch::Tensor inp, torch::Tensor roff_idx, torch::Tensor ker_idx, torch::Tensor row_idx,
-    //     torch::Tensor col_idx, torch::Tensor val, int64_t K, int64_t Ho, int64_t Wo) {
-    //     auto out = torch::empty({inp.size(0), inp.size(1), Ho, Wo}, inp.options());
-    //     return out;
-    // }
-
-    // // Implement the operators: Meta
-    // TORCH_LIBRARY_IMPL(disco_kernels, Meta, m)
-    // {
-    //     m.impl("forward",  &disco_meta_fwd);
-    //     m.impl("backward",  &disco_meta_bwd);
-    // }
-
 }
