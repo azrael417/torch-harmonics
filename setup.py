@@ -76,22 +76,31 @@ def get_compile_args(module_name):
             'nvcc': ['-O3', "-DNDEBUG"] + nvcc_extra_flags
         }
 
+def get_helpers_compile_args():
+    return {
+        'cxx': [
+            f'-DBUILD_CPP={1 if BUILD_CPP else 0}', 
+            f'-DBUILD_CUDA={1 if BUILD_CUDA else 0}'
+        ], 
+    }
+
 def get_ext_modules():
 
     ext_modules = []
     cmdclass = {}
 
-    if BUILD_CPP:
-        print(f"Compiling helper routines for torch-harmonics.")
-        ext_modules.append(
-            CppExtension(
-                 "disco_helpers", 
-                [
-                    "torch_harmonics/disco/csrc/disco_helpers.cpp",
-                ]
-            )
+    print(f"Compiling helper routines for torch-harmonics.")
+    ext_modules.append(
+        CppExtension(
+            "disco_helpers", 
+            [
+                "torch_harmonics/disco/csrc/disco_helpers.cpp",
+            ],
+            extra_compile_args=get_helpers_compile_args(),
         )
-        
+    )
+
+    if BUILD_CPP:
         # Create a single extension that includes both CPU and CUDA code
         sources = [
             "torch_harmonics/disco/csrc/disco_interface.cpp",

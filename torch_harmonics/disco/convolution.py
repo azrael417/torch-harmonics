@@ -45,16 +45,16 @@ from torch_harmonics.quadrature import _precompute_grid, _precompute_latitudes, 
 from ._disco_utils import _get_psi, _disco_s2_contraction_torch, _disco_s2_transpose_contraction_torch
 from ._disco_utils import _disco_s2_contraction_optimized, _disco_s2_transpose_contraction_optimized
 from torch_harmonics.filter_basis import FilterBasis, get_filter_basis
+from disco_helpers import optimized_kernels_is_available, preprocess_psi
 
 # import custom C++/CUDA extensions if available
-from disco_helpers import preprocess_psi
-try:
-    from torch.ops import disco_kernels
-    _optimized_extension_available = True
-except ImportError as err:
-    disco_kernels = None
-    _optimized_extension_available = False
-    warn("Could not find optimized DISCO extension, falling back to PyTorch implementation")
+#try:
+#    from torch.ops import disco_kernels
+#    _optimized_extension_available = True
+#except ImportError as err:
+#    disco_kernels = None
+#    _optimized_extension_available = False
+#    warn("Could not find optimized DISCO extension, falling back to PyTorch implementation")
 
 
 def _normalize_convolution_tensor_s2(
@@ -283,7 +283,7 @@ class DiscreteContinuousConv(nn.Module, metaclass=abc.ABCMeta):
         super().__init__()
 
         self.kernel_shape = kernel_shape
-        self.optimized_kernel = optimized_kernel and _optimized_extension_available
+        self.optimized_kernel = optimized_kernel and optimized_kernels_is_available()
 
         # get the filter basis functions
         self.filter_basis = get_filter_basis(kernel_shape=kernel_shape, basis_type=basis_type)
