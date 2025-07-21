@@ -226,6 +226,7 @@ class NeighborhoodAttentionS2(nn.Module):
         theta_cutoff: Optional[float] = None,
         k_channels: Optional[int] = None,
         out_channels: Optional[int] = None,
+        optimized_kernel: Optional[bool] = True,
     ):
         super().__init__()
 
@@ -236,6 +237,7 @@ class NeighborhoodAttentionS2(nn.Module):
         self.num_heads = num_heads
         self.k_channels = in_channels if k_channels is None else k_channels
         self.out_channels = in_channels if out_channels is None else out_channels
+        self.optimized_kernel = optimized_kernel and optimized_kernels_is_available()
 
         # heuristic to compute theta cutoff based on the bandlimit of the input field and overlaps of the basis functions
         if theta_cutoff is None:
@@ -330,7 +332,7 @@ class NeighborhoodAttentionS2(nn.Module):
         query_scaled = query * self.scale
 
         # TODO: insert dimension checks for input
-        if optimized_kernels_is_available():
+        if self.optimized_kernel:
 
             out = _neighborhood_s2_attention_optimized(
                 key,
@@ -352,9 +354,6 @@ class NeighborhoodAttentionS2(nn.Module):
                 self.nlon_out,
             )
         else:
-            if query.is_cuda:
-                warn("couldn't find CUDA extension, falling back to slow PyTorch implementation")
-
             # call attention
             out = _neighborhood_s2_attention_torch(
                 key,
